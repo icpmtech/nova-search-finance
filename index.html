@@ -32,6 +32,30 @@
       backdrop-filter: blur(10px);
     }
 
+    /* Style for autocomplete suggestions */
+    #autocompleteSuggestions {
+      position: absolute;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 500px;
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      overflow: hidden;
+      z-index: 101;
+    }
+
+    #autocompleteSuggestions div {
+      padding: 10px;
+      cursor: pointer;
+    }
+
+    #autocompleteSuggestions div:hover {
+      background: rgba(255,255,255,0.1);
+    }
+
     #searchForm {
       display: flex;
       gap: 10px;
@@ -41,6 +65,7 @@
       border-radius: 30px;
       padding: 5px;
       transition: transform 0.3s;
+      position: relative;
     }
 
     #searchForm:hover {
@@ -335,10 +360,13 @@
   </style>
 </head>
 <body>
+  <!-- Search Section with Autocomplete -->
   <div class="search-container">
     <form id="searchForm">
       <input type="text" id="symbolInput" placeholder="📈 Enter tickers (AAPL, TSLA, ...)" required />
       <button type="submit">🚀 Go</button>
+      <!-- Autocomplete suggestions will appear here -->
+      <div id="autocompleteSuggestions"></div>
     </form>
   </div>
 
@@ -356,11 +384,21 @@
   <div id="toastContainer"></div>
 
   <script>
+    // API credentials and endpoints
     const baseUrl = 'https://yahoo-finance166.p.rapidapi.com/api/news/list-by-symbol';
+    const autocompleteUrl = 'https://yahoo-finance166.p.rapidapi.com/api/autocomplete';
     const region = 'US';
     const snippetCount = 500;
     const apiKey = '60c4b7c12emshfe21a6a1ec58d8bp1a396cjsn6bc88b0f02f5';
     const apiHost = 'yahoo-finance166.p.rapidapi.com';
+
+    /* 
+      Example cURL command for autocomplete:
+      curl --request GET \
+        --url 'https://yahoo-finance166.p.rapidapi.com/api/autocomplete?query=AA' \
+        --header 'x-rapidapi-host: yahoo-finance166.p.rapidapi.com' \
+        --header 'x-rapidapi-key: 60c4b7c12emshfe21a6a1ec58d8bp1a396cjsn6bc88b0f02f5'
+    */
 
     async function fetchNews(symbols) {
       const url = `${baseUrl}?s=${encodeURIComponent(symbols)}&region=${region}&snippetCount=${snippetCount}`;
@@ -382,6 +420,52 @@
         console.error('Error:', error);
       }
     }
+
+    // Autocomplete: fetch suggestions based on query
+    async function fetchAutocomplete(query) {
+      const url = `${autocompleteUrl}?query=${encodeURIComponent(query)}`;
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'x-rapidapi-key': apiKey,
+            'x-rapidapi-host': apiHost
+          }
+        });
+        return await response.json();
+      } catch (error) {
+        console.error('Autocomplete error:', error);
+        return {};
+      }
+    }
+
+    function renderAutocompleteSuggestions(data) {
+      const suggestionsContainer = document.getElementById('autocompleteSuggestions');
+      suggestionsContainer.innerHTML = '';
+      // Assuming the response contains a "quotes" array
+      if (data.quotes && data.quotes.length > 0) {
+        data.quotes.forEach(quote => {
+          const suggestion = document.createElement('div');
+          suggestion.textContent = `${quote.symbol} - ${quote.shortname || quote.longname || ''}`;
+          suggestion.addEventListener('click', () => {
+            document.getElementById('symbolInput').value = quote.symbol;
+            suggestionsContainer.innerHTML = '';
+          });
+          suggestionsContainer.appendChild(suggestion);
+        });
+      }
+    }
+
+    // Listen to input events to trigger autocomplete
+    document.getElementById('symbolInput').addEventListener('input', async function() {
+      const query = this.value.trim();
+      if (query.length >= 1) {
+        const data = await fetchAutocomplete(query);
+        renderAutocompleteSuggestions(data);
+      } else {
+        document.getElementById('autocompleteSuggestions').innerHTML = '';
+      }
+    });
 
     function renderCards(data) {
       const container = document.getElementById('cardContainer');
@@ -418,7 +502,6 @@
         actionsDiv.appendChild(createActionButton('💾 Save', () => saveNews({
           title, pubDate, link, thumb, provider
         })));
-        
         actionsDiv.appendChild(createActionButton('🔗 Share', () => handleShare(link, title)));
         actionsDiv.appendChild(createActionButton('📖 Read', () => window.open(link, '_blank')));
 
